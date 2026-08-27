@@ -1,0 +1,19 @@
+# dados brutos e banco: nunca versionar (GBs, e regeneráveis)
+data/raw/
+data/db/
+data/processed/
+*.duckdb
+*.duckdb.wal
+
+# saídas regeneráveis. As figuras ficam versionadas porque aparecem no README.
+outputs/tabelas/
+outputs/*.json
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+.env
+.DS_Store
