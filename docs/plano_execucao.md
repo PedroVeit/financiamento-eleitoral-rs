@@ -11,16 +11,28 @@ posterior, não âncora.
 | 0 | Schema, esqueleto do repositório, Makefile, CI | **pronto** |
 | 0 | Deflator IPCA e camada de valores reais | **pronto** |
 | 0 | Gerador sintético em formato TSE + validação do estimador | **pronto** |
-| 1 | Scripts de download e carga do TSE | **escritos, não executados contra dado real** |
-| 1 | Validação dos totais contra as estatísticas oficiais | pendente |
-| 2 | Camada descritiva (SQL + gráficos) | **pronta**, rodando em sintético |
-| 3 | Nota metodológica e regras de decisão | **prontas e automatizadas** |
-| 4 | Modelo causal + bateria de robustez | **pronto**, rodando em sintético |
-| 5 | Redação dos resultados | depende da fase 1 |
+| 1 | Scripts de download e carga do TSE | **pronto e rodando contra o servidor real** |
+| 1 | Validação dos totais contra as estatísticas oficiais | feita por plausibilidade (teto legal de gasto, nº de eleitos ano a ano); comparação direta com o DivulgaCandContas não foi possível automatizar — ver nota abaixo |
+| 2 | Camada descritiva (SQL + gráficos) | **pronta**, rodada em dado real |
+| 3 | Nota metodológica e regras de decisão | **prontas, automatizadas, e já aplicadas a um resultado real** |
+| 4 | Modelo causal + bateria de robustez | **pronto**, rodado em dado real |
+| 5 | Redação dos resultados | **feita** — [`docs/resultados.md`](resultados.md) |
 | 6 | Extensões (outras UFs, outros cargos, Desenho B) | não iniciada |
 
-O caminho crítico é a fase 1. Todo o resto já está construído e testado, e
-passa a produzir resultado real assim que o banco for populado.
+O recorte vereador/RS/2020→2024 está encerrado com resultado **NÃO
+IDENTIFICADO** (ver `resultados.md`). O caminho crítico agora, se o
+projeto continuar, é a fase 6 — mais ciclos eleitorais para aumentar o
+poder estatístico da amostra.
+
+**Nota sobre a validação de totais:** o DivulgaCandContas é um painel
+carregado via JavaScript, sem endpoint agregável por busca automatizada
+(só consulta individual por candidato). A validação foi feita por
+plausibilidade: o gasto médio por candidato (R$ 2.304 em 2020, R$ 5.432
+em 2024) fica bem abaixo do teto legal de R$ 85.811,91 por candidatura a
+vereador no RS, como esperado; e o número de vereadores eleitos é quase
+idêntico entre os dois anos (4.902 e 4.903), como deveria ser. Quem
+quiser uma comparação direta pode abrir o painel manualmente para um
+recorte específico.
 
 ## Próximos passos, em ordem
 
@@ -84,23 +96,35 @@ portfólio, o histórico de commits denuncia isso.
 - [x] README compreensível por leigo em menos de dois minutos, com a
       seção "o que este projeto não conclui"
 - [x] CI rodando a suíte a cada push
-- [ ] Banco populado e validado com pelo menos duas eleições reais
-- [ ] Camada descritiva com dados reais
-- [ ] Estimativa causal reportada com robustez, inclusive no cenário de
-      efeito não identificado
-- [ ] Figura do README substituída pela versão com dado real
+- [x] Banco populado e validado com duas eleições reais (RS, vereador,
+      2020 e 2024)
+- [x] Camada descritiva com dados reais
+- [x] Estimativa causal reportada com robustez, no cenário de efeito
+      **não identificado** — `docs/resultados.md`
+- [x] Figura do README substituída pela versão com dado real
+
+O projeto está **completo** no recorte proposto. As extensões abaixo são
+melhorias possíveis, não pendências.
 
 ## Extensões, em ordem de custo-benefício
 
-1. **Demais UFs.** O código não tem nada específico do RS além de um
+1. **Mais ciclos eleitorais (2016, 2018, 2022).** É a extensão mais
+   direta e a que mais provavelmente resolve a instabilidade na janela
+   mais estreita observada em `resultados.md` — mais observações dão
+   mais poder estatístico exatamente onde a amostra atual é fraca.
+   Decisão a tomar **antes** de rodar de novo, não depois de ver se
+   "ajuda" o resultado.
+2. **Limites de Lee** para o efeito condicional a recandidatar-se, em
+   vez de só reportar que a regra bloqueou por seleção de amostra.
+3. **Demais UFs.** O código não tem nada específico do RS além de um
    argumento de linha de comando.
-2. **Deputado estadual (2018, 2022).** A mesma lógica intra-lista se
+4. **Deputado estadual (2018, 2022).** A mesma lógica intra-lista se
    aplica; muda o tamanho da lista e a unidade geográfica.
-3. **Modelar suplência.** Suplentes assumem cadeira com alguma
+5. **Modelar suplência.** Suplentes assumem cadeira com alguma
    frequência, o que atenua o efeito estimado. Tratar como tratamento
    parcial é um refinamento com literatura própria.
-4. **Deflação mensal** por data de transação, em vez de índice anual.
-5. **Desenho B** (efeito do gasto sobre voto) via limiares populacionais
+6. **Deflação mensal** por data de transação, em vez de índice anual.
+7. **Desenho B** (efeito do gasto sobre voto) via limiares populacionais
    de teto de gasto — projeto próprio, ver nota metodológica, seção 11.
-6. **Eleição de 2026**, quando as contas estiverem consolidadas. É
+8. **Eleição de 2026**, quando as contas estiverem consolidadas. É
    atualização do pipeline existente, não projeto novo.

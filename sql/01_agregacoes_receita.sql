@@ -140,7 +140,13 @@ JOIN vw_deflator d
      ON d.ano = c.ano_eleicao
 LEFT JOIN vw_receita_candidato rc ON rc.sq_candidato = c.sq_candidato
 LEFT JOIN vw_despesa_candidato dc ON dc.sq_candidato = c.sq_candidato
-WHERE c.situacao_candidatura IN ('APTO', 'DEFERIDO', 'DEFERIDO COM RECURSO');
+-- A partir do ciclo 2022, o TSE deixou de preencher
+-- DS_SITUACAO_CANDIDATURA no arquivo publicado apos a eleicao: o campo
+-- vem uniformemente como '#NE' (nao se aplica), porque so faz sentido
+-- durante o periodo de registro, nao no pacote final. Nesses anos a
+-- validade da candidatura ja esta garantida pelo JOIN com `resultados`
+-- (so quem tinha candidatura valida aparece no arquivo de votacao).
+WHERE c.situacao_candidatura IN ('APTO', 'DEFERIDO', 'DEFERIDO COM RECURSO', '#NE');
 
 
 -- ---------------------------------------------------------------------

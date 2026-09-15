@@ -262,7 +262,13 @@ def main(argv: list[str] | None = None) -> int:
                                  n_municipios=args.municipios, quieto=False)
         tau_ref = TAU_PADRAO
     else:
-        con = criar_banco(args.banco)
+        # Conecta ao banco ja carregado, SEM recriar o schema -- criar_banco()
+        # roda schema.sql, que comeca com DROP TABLE em tudo. Usar essa
+        # funcao aqui apagaria os dados reais que ja foram carregados via
+        # load_to_duckdb.py.
+        import duckdb as _duckdb
+        con = _duckdb.connect(str(args.banco))
+        aplicar_views(con)
 
     try:
         rodar(con, janela=args.janela, tau_ref=tau_ref)

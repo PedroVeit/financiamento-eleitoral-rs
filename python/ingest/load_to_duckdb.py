@@ -103,12 +103,12 @@ def _pick(cols: set[str], alternativas: list[str], default: str = "NULL") -> str
 def _hash_sql(expr: str) -> str:
     """SHA-256 salgado dos dígitos de um documento. NULL se vazio."""
     digitos = f"regexp_replace(COALESCE({expr}, ''), '[^0-9]', '', 'g')"
-    return (f"CASE WHEN length({digitos}) > 0 "
+    return (f"CASE WHEN length({digitos}) >= 9 "
             f"THEN sha256('{SAL}' || {digitos}) END")
 
 
 def _glob(subpasta: str, ano: int, prefixo: str) -> str:
-    return str(DIR_RAW / subpasta / str(ano) / f"{prefixo}*.csv").replace("\\", "/")
+    return str(DIR_RAW / subpasta / str(ano) / f"{prefixo}_{ano}*.csv").replace("\\", "/")
 
 
 # ---------------------------------------------------------------------
@@ -266,7 +266,7 @@ def carregar_receitas(con, ano: int) -> int:
         SELECT
             {_pick(cols, ['SQ_RECEITA', 'NR_RECIBO_DOACAO'])}   AS id_receita,
             TRY_CAST({sq} AS BIGINT)                            AS sq_candidato,
-            TRY_CAST({_pick(cols, ['ANO_ELEICAO'])} AS INTEGER) AS ano_eleicao,
+            TRY_CAST({_pick(cols, ['ANO_ELEICAO', 'AA_ELEICAO'])} AS INTEGER) AS ano_eleicao,
             {_case_fonte(origem, fonte)}                        AS fonte,
             COALESCE({origem}, '') || ' | ' || COALESCE({fonte}, '') AS origem_bruta,
             {_valor(_pick(cols, ['VR_RECEITA']))}               AS valor,
@@ -293,7 +293,7 @@ def carregar_despesas(con, ano: int) -> int:
         SELECT
             {_pick(cols, ['SQ_DESPESA', 'NR_DOCUMENTO'])}       AS id_despesa,
             TRY_CAST({sq} AS BIGINT)                            AS sq_candidato,
-            TRY_CAST({_pick(cols, ['ANO_ELEICAO'])} AS INTEGER) AS ano_eleicao,
+            TRY_CAST({_pick(cols, ['ANO_ELEICAO', 'AA_ELEICAO'])} AS INTEGER) AS ano_eleicao,
             {_pick(cols, ['DS_TIPO_DESPESA', 'DS_DESPESA'])}    AS categoria,
             {_valor(_pick(cols, ['VR_DESPESA_CONTRATADA', 'VR_DESPESA']))} AS valor,
             TRY_STRPTIME({_pick(cols, ['DT_DESPESA'])}, '%d/%m/%Y')::DATE  AS data_despesa,

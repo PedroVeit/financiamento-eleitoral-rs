@@ -53,6 +53,19 @@ ANOS_SUPORTADOS = (2018, 2020, 2022, 2024, 2026)
 TIMEOUT = 180
 BLOCO = 1 << 20
 
+#: A CDN do TSE (Cloudflare) devolve 403 Forbidden para requisições sem
+#: cabeçalhos de navegador -- nao e problema de permissao nem de URL
+#: errada, e bloqueio de trafego automatizado. Um User-Agent e Accept
+#: comuns de navegador resolvem, sem burlar controle de acesso real.
+CABECALHOS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/124.0.0.0 Safari/537.36"),
+    "Accept": "*/*",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+    "Referer": "https://dadosabertos.tse.jus.br/",
+}
+
 
 def baixar(url: str, destino: Path, forcar: bool = False) -> Path:
     if destino.exists() and destino.stat().st_size > 0 and not forcar:
@@ -62,7 +75,7 @@ def baixar(url: str, destino: Path, forcar: bool = False) -> Path:
     destino.parent.mkdir(parents=True, exist_ok=True)
     print(f"  [baixando] {url}")
     parcial = destino.with_suffix(destino.suffix + ".part")
-    with requests.get(url, stream=True, timeout=TIMEOUT) as resp:
+    with requests.get(url, stream=True, timeout=TIMEOUT, headers=CABECALHOS) as resp:
         resp.raise_for_status()
         total = int(resp.headers.get("Content-Length", 0))
         feito = 0

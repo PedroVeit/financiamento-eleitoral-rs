@@ -194,3 +194,42 @@ MSE-ótima faz o recorte.
 **Mas:** a amostra de fronteira roda como robustez
 (`vw_amostra_fronteira`), com o par completo exigido — meio par não é
 comparação.
+
+---
+
+## D13 — Correções encontradas na primeira carga de dados reais (RS, vereador, 2020/2024)
+
+Quatro problemas apareceram só ao rodar contra o TSE de verdade — nenhum
+aparecia nos dados sintéticos porque o simulador não reproduzia esses
+comportamentos específicos do dado real. Registrados aqui para quem abrir
+o código depois não estranhar os `#NE` e o piso de 9 dígitos.
+
+**D13.1 — Coluna de ano em receitas/despesas é `AA_ELEICAO`, não
+`ANO_ELEICAO`.** Só nesses dois arquivos; candidatos e resultados usam
+`ANO_ELEICAO` normalmente. `COLMAP` agora aceita as duas alternativas.
+
+**D13.2 — `DS_SITUACAO_CANDIDATURA` vem como `#NE` em 100% das linhas a
+partir do ciclo 2022+.** O TSE parou de preencher esse campo no pacote
+publicado após a eleição — ele só fazia sentido durante o período de
+registro. A validade da candidatura já é garantida pelo `JOIN` com
+`resultados` (só quem tinha candidatura válida aparece no arquivo de
+votação), então o filtro agora aceita `#NE` como valor neutro, mantendo
+a exclusão de `INAPTO` nos anos em que o campo é preenchido de verdade
+(2020 e anteriores).
+
+**D13.3 — `NR_CPF_CANDIDATO` vem como sentinela `-4` em 100% das linhas
+de 2024.** Sem piso de tamanho, `-4` vira o dígito `4` depois de limpar
+pontuação, e É tratado como documento válido — e como o sentinela é
+igual para todo mundo, todo mundo ganharia o MESMO hash. `_hash_sql`
+agora exige pelo menos 9 dígitos restantes (CPF tem 11, CNPJ tem 14; um
+único dígito nunca é documento real). Consequência aceita: o pareamento
+de painel entre 2020 e 2024 cai inteiramente para nível 2 (nome +
+município) — o CPF de 2024 simplesmente não é publicado nesse recorte.
+
+**D13.4 — `run_pipeline.py` apagava os dados reais ao rodar sem
+`--sintetico`.** O caminho não-sintético chamava `criar_banco()`, que
+roda `schema.sql` (que começa com `DROP TABLE` em tudo) — apropriado
+para o modo sintético, que sempre quer recriar do zero, mas destrutivo
+para o modo real, que espera um banco já populado por
+`load_to_duckdb.py`. Corrigido para abrir uma conexão simples e só
+reaplicar as views.

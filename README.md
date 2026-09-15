@@ -15,10 +15,14 @@ Este projeto vira a pergunta do avesso e mede o pedaço que **é**
 identificável — que por acaso é justamente o mecanismo que torna a
 correlação enganosa.
 
-> ⚠️ **Status:** pipeline completo, validado ponta a ponta contra dados
-> sintéticos com efeito causal conhecido. A execução sobre os dados reais
-> do TSE ainda não foi feita, e **nenhum resultado sobre eleições reais é
-> reportado aqui**. Ver [Estado atual](#estado-atual).
+> ⚠️ **Status:** pipeline completo, validado contra dados sintéticos com
+> efeito causal conhecido e executado sobre dados reais do TSE (vereador,
+> RS, 2020→2024). **A regra de decisão pré-registrada classificou o
+> resultado como NÃO IDENTIFICADO** — há um sinal positivo consistente
+> em quase toda a varredura de robustez, mas não com a estabilidade que
+> o desenho exige. Relatório completo em
+> [`docs/resultados.md`](docs/resultados.md). Ver
+> [Estado atual](#estado-atual).
 
 ---
 
@@ -53,7 +57,10 @@ esquerda do tracejado, quem ficou de fora; à direita, quem se elegeu. Se
 vencer não tivesse efeito nenhum, as duas linhas se encontrariam no
 corte. O tamanho do degrau é a estimativa causal.
 
-*(Figura gerada com dados sintéticos — ver [Estado atual](#estado-atual).)*
+*(Figura gerada com dados reais — vereador, RS, 2020→2024. O resultado
+não atingiu a robustez exigida pela regra de decisão pré-registrada;
+ver [`docs/resultados.md`](docs/resultados.md) para a leitura completa
+antes de interpretar o degrau visualmente.)*
 
 ---
 
@@ -165,7 +172,11 @@ que um obviamente quebrado, porque não convida a verificação.
 - **Não enxerga caixa dois.** O dado é o que foi declarado à Justiça
   Eleitoral.
 - **Não trata resultado nulo como fracasso.** Se a robustez não sustentar
-  um efeito, isso é reportado como tal.
+  um efeito, isso é reportado como tal — e é exatamente o que aconteceu
+  no recorte atual (vereador, RS, 2020→2024): a regra de decisão
+  classificou o resultado como não identificado, apesar de um sinal
+  positivo consistente na maior parte da robustez. Ver
+  [`docs/resultados.md`](docs/resultados.md) para a leitura completa.
 - **Não tem vínculo institucional.** Projeto pessoal, dados públicos.
 
 ## Estrutura
@@ -184,6 +195,7 @@ python/
   run_pipeline.py                orquestra tudo
 docs/
   nota_metodologica_rdd.md       o que o desenho identifica e o que não
+  resultados.md                  resultado sobre dados reais e sua leitura
   plano_execucao.md              o que falta, em ordem
   dicionario_dados.md            tabelas, views e colunas
   decisoes.md                    decisões de projeto, com a razão de cada uma
@@ -208,19 +220,22 @@ tests/                           44 testes de integridade e de recuperação do 
 | Etapa | Situação |
 |---|---|
 | Schema, camada SQL e deflator | pronto |
-| Ingestão do TSE | escrita, **não testada contra o servidor real** |
-| Pareamento do painel entre eleições | pronto |
-| Modelo causal + bateria de robustez | pronto |
-| Regras de decisão pré-registradas | prontas e automatizadas |
+| Ingestão do TSE | **testada e rodando contra o servidor real** (vereador, RS, 2020/2024) |
+| Pareamento do painel entre eleições | pronto — 30,2% de cobertura no recorte atual |
+| Modelo causal + bateria de robustez | pronto, rodado em dado real |
+| Regras de decisão pré-registradas | prontas, automatizadas, e já aplicadas a um resultado real |
 | Validação em dados sintéticos | pronta, 44 testes passando |
-| Execução em dados reais | **pendente** |
+| Execução em dados reais | **feita** — resultado: NÃO IDENTIFICADO, ver [`docs/resultados.md`](docs/resultados.md) |
 | Desenho B (efeito do gasto sobre voto) | ver nota metodológica, seção 11 |
 
 O código de download foi escrito a partir da estrutura conhecida do
-Repositório de Dados Eleitorais, mas o TSE altera nomes de arquivo e de
-coluna entre eleições. Espere ajustar `FONTES` em `download_tse.py` e
-`COLMAP` em `load_to_duckdb.py` na primeira execução — é manutenção
-esperada, não sinal de erro. Ver [`docs/plano_execucao.md`](docs/plano_execucao.md).
+Portal de Dados Abertos, e precisou de ajustes reais na primeira
+execução — documentados em [`docs/decisoes.md`](docs/decisoes.md) (D13):
+a CDN do TSE bloqueia requisições sem cabeçalho de navegador, o nome da
+coluna de ano difere entre arquivos, o campo de situação de candidatura
+e o de CPF vêm com códigos sentinela (`#NE`, `-4`) a partir do ciclo
+2022+. Nenhum desses ajustes muda a lógica do desenho — são adaptações
+ao formato publicado, com o motivo de cada um registrado.
 
 ## Fontes
 
