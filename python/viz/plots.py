@@ -1,15 +1,3 @@
-"""Figuras do projeto.
-
-Princípios adotados:
-  * O gráfico de descontinuidade mostra os DADOS BINADOS, não só a linha
-    ajustada. Curva suave sobre nuvem invisível esconde justamente o que
-    o leitor precisa julgar.
-  * Nenhum gráfico ordena ou colore partidos por posição ideológica; a
-    ordem é alfabética ou por valor, e o objeto de estudo é o mecanismo
-    de financiamento, não os atores.
-  * Eixos monetários indicam o ano-base de deflação.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
