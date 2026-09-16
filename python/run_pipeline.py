@@ -1,17 +1,3 @@
-"""Roda o pipeline inteiro: descritiva -> RDD -> robustez -> figuras.
-
-    python -m python.run_pipeline --sintetico       # dados de teste
-    python -m python.run_pipeline --banco data/db/financiamento.duckdb
-
-Saídas: tabelas em outputs/tabelas/, figuras em outputs/figures/ e um
-relatório consolidado em outputs/relatorio_rdd.json.
-
-Ordem deliberada: a validação e as contagens por janela vêm ANTES da
-estimativa causal. Escolher o recorte depois de ver o resultado é como
-se fabrica falso positivo — e num projeto de portfólio o histórico de
-commits denuncia isso.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -35,13 +21,8 @@ from python.viz import plots                             # noqa: E402
 DIR_OUT = RAIZ / "outputs"
 DIR_TAB = DIR_OUT / "tabelas"
 
-# Desfechos do desenho causal.
-#
-# A separação entre margem EXTENSIVA e INTENSIVA é deliberada. Misturar
-# as duas num único ln(1 + receita) põe uma pilha de zeros (quem não
-# voltou a concorrer) no meio de valores na casa de ln(receita) ~ 11:
-# infla a variância e transforma um efeito sobre captação num efeito
-# sobre "continuar na política" mal disfarçado.
+
+
 DESFECHOS: dict[str, tuple[str, str]] = {
     "concorreu_t1":       ("voltou a concorrer na eleição seguinte (0/1)", "extensiva"),
     "ln_receita_t1_cond": ("ln(receita na eleição seguinte)", "intensiva"),
@@ -51,11 +32,8 @@ DESFECHOS: dict[str, tuple[str, str]] = {
 }
 DESFECHO_PRINCIPAL = "ln_receita_t1_cond"
 
-# Covariáveis fixadas ANTES do resultado eleitoral: têm de ser contínuas
-# no corte. Só entram variáveis que variam DENTRO da lista — atributos
-# constantes por lista (nº de candidatos, cadeiras) são contínuos por
-# construção, já que os dois lados do corte vêm da mesma lista, e testá-los
-# produz um placebo que passa de graça.
+
+
 COVARIAVEIS_PLACEBO = ["ln_receita_t", "ln_despesa_t", "share_fefc_t",
                        "n_doadores_t", "idade_posse", "genero_fem"]
 
@@ -262,10 +240,7 @@ def main(argv: list[str] | None = None) -> int:
                                  n_municipios=args.municipios, quieto=False)
         tau_ref = TAU_PADRAO
     else:
-        # Conecta ao banco ja carregado, SEM recriar o schema -- criar_banco()
-        # roda schema.sql, que comeca com DROP TABLE em tudo. Usar essa
-        # funcao aqui apagaria os dados reais que ja foram carregados via
-        # load_to_duckdb.py.
+    
         import duckdb as _duckdb
         con = _duckdb.connect(str(args.banco))
         aplicar_views(con)
