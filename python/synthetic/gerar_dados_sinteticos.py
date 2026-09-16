@@ -1,41 +1,3 @@
-"""Gera CSVs sintéticos no MESMO formato dos arquivos do TSE.
-
-Para que serve
---------------
-1. **Validação do estimador.** Os dados vêm de um processo em que o
-   efeito causal é CONHECIDO por construção (`efeito_verdadeiro`). Se o
-   pipeline de RDD não recupera esse número, ele não deve ser levado a
-   sério no dado real. É teste de software aplicado a inferência causal.
-
-2. **Reprodutibilidade sem download.** Qualquer pessoa clona o repo,
-   roda `make demo` e vê o pipeline inteiro funcionando em cerca de um
-   minuto, sem baixar os GBs do TSE.
-
-3. **O caminho de ingestão também é testado.** A saída são CSVs no
-   formato do TSE (latin-1, `;`, decimal com vírgula), não inserts
-   diretos nas tabelas — então `load_to_duckdb.py` é exercitado de
-   verdade, incluindo o parse de valores e a classificação de fonte.
-
-Isto NÃO é dado eleitoral real e nunca deve aparecer em resultado
-publicado.
-
-Processo gerador (DGP)
-----------------------
-    qualidade_i         ~ N(0, 1)                       (NÃO observada)
-    ln(receita_it)      = a + b*qualidade_i + e
-    votos_it            = exp(c + d*qualidade_i + u)    (u grande: perto
-                                                         do corte, quem
-                                                         passa é quase
-                                                         sorteado)
-    eleito_it           = 1[está entre as S mais votadas DA LISTA]
-    ln(receita_i,t+1)   = a + b*qualidade_i + TAU*eleito_it + v
-
-`qualidade` entra em receita E em votos: é exatamente a variável omitida
-que torna enganosa a correlação simples entre gasto e voto. O simulador
-reproduz o viés de propósito — a regressão ingênua nestes dados também
-"acha" efeito do dinheiro sobre o voto.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -94,17 +56,8 @@ def gerar(
     frac_homonimos: float = 0.02,
     semente: int = 20260827,
 ) -> dict:
-    """Escreve os CSVs sintéticos e devolve o gabarito do experimento.
 
-    `frac_cpf_publicado` simula o fato de que o TSE deixou de publicar o
-    CPF completo em parte dos arquivos: quem fica sem CPF só pode ser
-    pareado por nome, o que exercita a cascata de build_panel.py.
-
-    `frac_homonimos` injeta nomes repetidos entre municípios diferentes.
-    O pareamento tem que DESCARTAR esses casos no nível que usa só nome
-    + UF, em vez de casar errado — homônimo mal pareado vira efeito
-    espúrio.
-    """
+   
     dir_raw = Path(dir_raw)
     rng = np.random.default_rng(semente)
     ano_t, ano_t1 = anos
