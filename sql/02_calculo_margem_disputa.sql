@@ -1,38 +1,3 @@
--- =====================================================================
--- 02_calculo_margem_disputa.sql — variável de corte (running variable)
---
--- PONTO CENTRAL DO PROJETO. LEIA ANTES DE USAR.
--- ---------------------------------------------------------------------
--- Em eleição proporcional (vereador, deputado estadual/federal) o
--- candidato NÃO é eleito por estar entre os N mais votados da disputa:
---
---   1. O quociente eleitoral e a distribuição de sobras definem quantas
---      cadeiras (S) cada LISTA (partido / federação / coligação) ganhou.
---   2. Dentro da lista, as cadeiras vão para os S candidatos mais
---      votados nominalmente.
---   3. Logo, entre o S-ésimo e o (S+1)-ésimo candidato DA MESMA LISTA
---      existe um corte determinístico e afiado (sharp RD).
---
--- Consequência: ordenar todos os candidatos do município por voto e
--- cortar na N-ésima vaga produz um limiar FICTÍCIO. Um candidato com
--- 900 votos pode se eleger enquanto outro com 1.500 não se elege, se
--- estiverem em listas diferentes — e boa parte dos eleitos aparece do
--- lado errado desse corte inventado. O teste
--- `test_margem_nao_usa_ranking_da_disputa` documenta o fenômeno.
---
--- O par comparável é: último eleito da lista × primeiro suplente da
--- MESMA lista. Mesma legenda, mesmo município, mesmo ano, mesma regra,
--- disputando literalmente a mesma cadeira.
---
--- S é lido do resultado OBSERVADO (contagem de eleitos por lista), não
--- remodelado a partir do quociente — remodelar reintroduziria erro de
--- medida na variável de tratamento.
--- =====================================================================
-
-
--- ---------------------------------------------------------------------
--- Passo 1 — posição de cada candidatura dentro da própria lista
--- ---------------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_rank_lista AS
 SELECT
     f.*,
@@ -63,9 +28,8 @@ SELECT
         PARTITION BY f.ano_eleicao, f.turno, f.cargo, f.uf, f.municipio
     ) AS votos_nominais_disputa,
 
-    -- empates exatos em votos: o desempate legal é por idade, não por
-    -- voto. Nesses casos o tratamento deixa de ser função só da
-    -- variável de corte e o desenho sharp não vale.
+    -- empates exatos em votos: o desempate legal é por idade, não por voto
+    
     COUNT(*) OVER (
         PARTITION BY f.ano_eleicao, f.turno, f.cargo, f.uf, f.municipio,
                      f.id_lista, f.votos_nominais
@@ -73,11 +37,6 @@ SELECT
 FROM vw_financas_candidato f;
 
 
--- ---------------------------------------------------------------------
--- Passo 2 — os dois candidatos que definem o corte em cada lista
---   v_ultimo_eleito     = votos do eleito MENOS votado da lista
---   v_primeiro_suplente = votos do não-eleito MAIS votado da lista
--- ---------------------------------------------------------------------
 CREATE OR REPLACE VIEW vw_corte_lista_bruto AS
 SELECT
     ano_eleicao, turno, cargo, uf, municipio, id_lista, id_lista_disputa,
@@ -88,15 +47,7 @@ SELECT
 FROM vw_rank_lista
 GROUP BY ALL;
 
--- Corte válido = estritamente positivo. Três situações caem fora, de
--- propósito, e cada descarte é contado em vw_listas_descartadas:
---   (a) lista sem nenhum eleito, ou sem nenhum não-eleito: não há
---       contrafactual interno, não existe corte observável;
---   (b) EMPATE no corte (v_ultimo_eleito = v_primeiro_suplente): o
---       desempate é por idade, não por votos;
---   (c) INVERSÃO (não-eleito com mais votos que um eleito da mesma
---       lista): vem de cassação, substituição, indeferimento posterior.
---       Não é eleição decidida por votos.
+
 CREATE OR REPLACE VIEW vw_corte_lista AS
 SELECT * FROM vw_corte_lista_bruto
 WHERE v_ultimo_eleito IS NOT NULL
@@ -119,18 +70,7 @@ WHERE v_ultimo_eleito IS NULL
 GROUP BY 1;
 
 
--- ---------------------------------------------------------------------
--- Passo 3 — a variável de corrida
---
---   margem_votos > 0  <=>  candidato eleito
---   margem_votos < 0  <=>  candidato não eleito
---
--- Duas normalizações são gravadas. A análise principal usa
--- margem_rel_lista (denominador = votos nominais da lista), convenção
--- mais comum na literatura de RDD em lista aberta; margem_rel_disputa
--- entra como teste de robustez. A conclusão não pode depender da
--- escolha de normalização, e isso é verificado.
--- ---------------------------------------------------------------------
+
 CREATE OR REPLACE VIEW vw_margem_candidato AS
 SELECT
     r.*,
@@ -160,14 +100,7 @@ JOIN vw_corte_lista k USING (id_lista_disputa)
 WHERE r.n_empatados = 1;    -- descarta empates exatos dentro da lista
 
 
--- ---------------------------------------------------------------------
--- Passo 4 — testes de consistência interna.
--- Se qualquer uma destas views retornar linha, o pipeline está
--- quebrado e a análise causal NÃO deve ser rodada. Rodadas em tests/
--- e em validar() na carga.
--- ---------------------------------------------------------------------
 
--- O sinal da margem tem que reproduzir exatamente o status de eleito.
 CREATE OR REPLACE VIEW vw_check_sinal_margem AS
 SELECT sq_candidato, ano_eleicao, municipio, id_lista,
        posicao_na_lista, cadeiras_da_lista, votos_nominais, margem_votos, eleito
@@ -176,8 +109,7 @@ WHERE (margem_votos > 0 AND NOT eleito)
    OR (margem_votos < 0 AND eleito)
    OR (margem_votos = 0);
 
--- A folga do último eleito e a do primeiro suplente são a mesma
--- distância, com sinais opostos. Assimetria = bug no cálculo do corte.
+
 CREATE OR REPLACE VIEW vw_check_simetria_margem AS
 SELECT
     id_lista_disputa,

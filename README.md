@@ -1,7 +1,9 @@
 # Financiamento de campanha e retorno eleitoral
 
 **Ganhar uma eleição, por si só, faz um candidato captar mais dinheiro na
-eleição seguinte?** Este projeto responde com dados públicos do TSE e um
+eleição seguinte?** 
+
+Este projeto responde com dados públicos do TSE e um
 desenho de identificação causal, não com correlação.
 
 A pergunta parece invertida de propósito — e é. A pergunta que todo mundo
