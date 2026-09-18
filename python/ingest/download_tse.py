@@ -49,14 +49,21 @@ FONTES = {
     "contas": f"{CDN}/prestacao_contas/prestacao_de_contas_eleitorais_candidatos_{{ano}}.zip",
 }
 
-ANOS_SUPORTADOS = (2018, 2020, 2022, 2024, 2026)
+#: Anos com eleição para vereador (municipais, múltiplos de 4) e anos com
+#: eleição geral (deputado/senador/presidente, para expansão futura a
+#: outros cargos). Vereador e prefeito só existem nos anos municipais —
+#: 2018, 2022 e 2026 são eleições gerais e não têm candidatura a vereador.
+ANOS_MUNICIPAIS = (2012, 2016, 2020, 2024)
+ANOS_GERAIS = (2018, 2022, 2026)
+ANOS_SUPORTADOS = tuple(sorted(ANOS_MUNICIPAIS + ANOS_GERAIS))
 TIMEOUT = 180
 BLOCO = 1 << 20
 
 #: A CDN do TSE (Cloudflare) devolve 403 Forbidden para requisições sem
-#: cabeçalhos de navegador -- nao e problema de permissao nem de URL
-#: errada, e bloqueio de trafego automatizado. Um User-Agent e Accept
-#: comuns de navegador resolvem, sem burlar controle de acesso real.
+#: cabeçalhos de navegador — não é um problema de permissão nem de URL
+#: errada, é bloqueio de tráfego automatizado "óbvio". Um User-Agent e
+#: Accept comuns de navegador resolvem sem burlar nenhum controle de
+#: acesso real: o dado é público, servido sem login.
 CABECALHOS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                    "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -75,7 +82,8 @@ def baixar(url: str, destino: Path, forcar: bool = False) -> Path:
     destino.parent.mkdir(parents=True, exist_ok=True)
     print(f"  [baixando] {url}")
     parcial = destino.with_suffix(destino.suffix + ".part")
-    with requests.get(url, stream=True, timeout=TIMEOUT, headers=CABECALHOS) as resp:
+    with requests.get(url, stream=True, timeout=TIMEOUT,
+                      headers=CABECALHOS) as resp:
         resp.raise_for_status()
         total = int(resp.headers.get("Content-Length", 0))
         feito = 0
@@ -116,10 +124,19 @@ def extrair(zip_path: Path, dir_saida: Path, apenas_uf: str | None = None) -> li
 
 
 def inspecionar(zip_path: Path, apenas_uf: str | None = None) -> None:
-    """Imprime o cabeçalho de cada CSV sem extrair. Use ao abrir um ano novo."""
+    """Imprime o cabeçalho de cada CSV/TXT sem extrair. Use ao abrir um ano novo.
+
+    Anos anteriores a 2018 publicam a prestação de contas como .txt, com
+    layout totalmente diferente (cabeçalho em português por extenso, não
+    os códigos ALLCAPS do resto do TSE) -- ver `FORMATO_CONTAS_LEGADO` em
+    load_to_duckdb.py. Por isso aceita as duas extensões, não só .csv:
+    um pacote que só tem .txt ficava mudo aqui antes desta correção,
+    passando a impressão de "zip vazio" quando na verdade só faltava a
+    extensão certa no filtro.
+    """
     with zipfile.ZipFile(zip_path) as zf:
         for nome in zf.namelist():
-            if not nome.lower().endswith(".csv"):
+            if not nome.lower().endswith((".csv", ".txt")):
                 continue
             if apenas_uf and f"_{apenas_uf.upper()}." not in nome.upper():
                 continue

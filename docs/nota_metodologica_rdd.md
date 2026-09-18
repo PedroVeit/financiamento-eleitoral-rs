@@ -242,6 +242,17 @@ ranking de eficiência entre candidatos ou partidos.
 7. **Deflação por índice anual** é aproximação. O rigoroso seria
    deflacionar cada lançamento pela data da transação; o schema guarda
    `data_receita` e `data_despesa` para permitir isso depois.
+8. **Painel empilhado assume erro-padrão independente entre pares de
+   anos diferentes.** Ao empilhar mais de um ciclo (ex.: 2016→2020 e
+   2020→2024 — ver `docs/decisoes.md`, D14), uma pessoa que disputou nas
+   três eleições contribui duas observações ao painel, uma para cada
+   transição. É o desenho correto de RDD em painel — cada transição é
+   uma unidade de tratamento válida — mas o agrupamento de erro-padrão
+   por lista-disputa não captura a correlação entre as duas observações
+   da mesma pessoa em anos diferentes. Não invalida a estimativa pontual,
+   mas pode subestimar levemente o erro-padrão quando há muitos
+   recandidatos de 3+ eleições; agrupar por pessoa é o refinamento
+   natural se isso passar a importar.
 
 ---
 
@@ -253,8 +264,10 @@ do pipeline. O veredito é um de três:
 
 - **NÃO IDENTIFICADO** — se o teste de densidade rejeitar, se **duas ou
   mais** covariáveis pré-tratamento saltarem no corte, se dois ou mais
-  cortes placebo derem significantes, ou se o efeito trocar de sinal ao
-  longo da varredura de janelas. Nesse caso o resultado **não é
+  cortes placebo derem significantes, se o efeito trocar de sinal ao
+  longo da varredura de janelas, ou se, havendo mais de um ciclo
+  eleitoral empilhado (D14), dois ou mais ciclos forem individualmente
+  significativos com sinais opostos. Nesse caso o resultado **não é
   reportado como efeito causal**, com ou sem ressalva.
 - **CONDICIONAL** — se ser eleito afetar a probabilidade de voltar a
   concorrer (p < 0,10). O efeito sobre receita existe, mas é condicional

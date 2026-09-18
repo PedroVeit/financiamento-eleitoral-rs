@@ -208,6 +208,25 @@ def rodar(con, janela: float | None = None, tau_ref: float | None = None,
     except Exception as e:
         print(f"    [pulado] {e}")
 
+    print("\n  4.9 heterogeneidade por ciclo eleitoral")
+    # conta só ciclos com desfecho observável -- o ano mais recente
+    # carregado nunca tem par de saída (ver docstring da função) e não
+    # deve contar como um "ciclo" de comparação
+    n_ciclos = principal_df.dropna(subset=[DESFECHO_PRINCIPAL])["ano_eleicao"].nunique()
+    if n_ciclos < 2:
+        print(f"    [pulado] só {n_ciclos} ciclo eleitoral no painel -- "
+              f"nada a comparar. Roda de novo depois de empilhar mais de "
+              f"um par de eleições (ver docs/plano_execucao.md).")
+        heterog = pd.DataFrame()
+    else:
+        heterog = rdd.teste_heterogeneidade_por_ciclo(principal_df, DESFECHO_PRINCIPAL,
+                                                      janela=janela)
+        if not heterog.empty:
+            print(heterog[["ciclo", "tau", "erro_padrao", "p_valor", "n"]]
+                  .to_string(index=False))
+    _salvar(heterog, "rdd_heterogeneidade_ciclo.csv")
+    relatorio["heterogeneidade_ciclo"] = heterog.to_dict("records")
+
     # -- 5. figuras ---------------------------------------------------
     print("\n=== 5. figuras ===")
     # janela do gráfico um pouco maior que a banda ótima, para que a
@@ -262,10 +281,10 @@ def main(argv: list[str] | None = None) -> int:
                                  n_municipios=args.municipios, quieto=False)
         tau_ref = TAU_PADRAO
     else:
-        # Conecta ao banco ja carregado, SEM recriar o schema -- criar_banco()
-        # roda schema.sql, que comeca com DROP TABLE em tudo. Usar essa
-        # funcao aqui apagaria os dados reais que ja foram carregados via
-        # load_to_duckdb.py.
+        # Conecta ao banco já carregado, SEM recriar o schema. criar_banco()
+        # roda schema.sql, que começa com DROP TABLE em tudo — usá-la aqui
+        # apagaria os dados reais que já foram carregados via
+        # load_to_duckdb.py antes de rodar a análise.
         import duckdb as _duckdb
         con = _duckdb.connect(str(args.banco))
         aplicar_views(con)

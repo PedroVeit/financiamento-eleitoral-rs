@@ -9,6 +9,7 @@ se reintroduz sem perceber numa refatoração.
 from __future__ import annotations
 
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -182,3 +183,211 @@ def test_schema_e_reexecutavel(tmp_path):
     aplicar_views(c)
     assert c.execute("SELECT COUNT(*) FROM vw_amostra_rdd").fetchone()[0] == 0
     c.close()
+
+
+# ---------------------------------------------------------------------
+# Formato legado de prestação de contas (anos < 2018)
+#
+# O TSE usava, antes de 2018, cabeçalho em português por extenso em vez
+# dos códigos ALLCAPS do resto do pipeline, com uma armadilha real: o
+# nome da coluna do número do documento tem acento em "despesas"
+# ("Número do documento") e NÃO tem em "receitas" ("Numero do
+# documento"). Sem este teste, o pipeline só descobriria isso ao rodar
+# contra o dado de 2016 de verdade -- tarde demais para corrigir sem
+# recarregar tudo.
+# ---------------------------------------------------------------------
+def _escrever_legado(caminho, cabecalho: list[str], linhas: list[list[str]]) -> None:
+    import csv
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    with open(caminho, "w", encoding="latin-1", newline="") as fh:
+        w = csv.writer(fh, delimiter=";", quoting=csv.QUOTE_ALL)
+        w.writerow(cabecalho)
+        for linha in linhas:
+            w.writerow(linha)
+
+
+def test_carga_legado_receitas_e_despesas(tmp_path, monkeypatch):
+    from python.ingest import load_to_duckdb as mod
+
+    monkeypatch.setattr(mod, "DIR_RAW", tmp_path)
+    monkeypatch.setitem(mod.FORMATO_CONTAS_LEGADO, 2016, {
+        "receitas_prefixo": "receitas_candidatos_prestacao_contas_final",
+        "despesas_prefixo": "despesas_candidatos_prestacao_contas_final",
+        "extensao": "txt",
+    })
+
+    # cabeçalho real de receitas 2016, com "Numero do documento" SEM acento
+    cab_receitas = [
+        "Cód. Eleição", "Desc. Eleição", "Data e hora", "CNPJ Prestador Conta",
+        "Sequencial Candidato", "UF", "Sigla da UE", "Nome da UE",
+        "Sigla  Partido", "Numero candidato", "Cargo", "Nome candidato",
+        "CPF do candidato", "CPF do vice/suplente", "Numero Recibo Eleitoral",
+        "Numero do documento", "CPF/CNPJ do doador", "Nome do doador",
+        "Nome do doador (Receita Federal)", "Sigla UE doador",
+        "Número partido doador", "Número candidato doador",
+        "Cod setor econômico do doador", "Setor econômico do doador",
+        "Data da receita", "Valor receita", "Tipo receita", "Fonte recurso",
+        "Especie recurso", "Descricao da receita",
+        "CPF/CNPJ do doador originário", "Nome do doador originário",
+        "Tipo doador originário", "Setor econômico do doador originário",
+        "Nome do doador originário (Receita Federal)",
+    ]
+    # "Tipo receita" leva a categoria detalhada de verdade (é o que a
+    # classificação usa); "Fonte recurso" leva um valor grosseiro típico
+    # do arquivo real ("Outros Recursos"), para não mascarar o bug real
+    # que este teste existe para travar -- ver docs/decisoes.md, D17.
+    linha_receita = ["2", "Eleição Municipal 2016", "01/10/2016", "", "999",
+                     "RS", "12345", "MUNICIPIO TESTE", "AAA", "10123",
+                     "Vereador", "FULANO DE TAL", "11122233344", "", "REC1",
+                     "DOC1", "55566677788", "DOADOR TESTE", "", "", "", "",
+                     "", "", "15/09/2016", "1.234,56", "Recursos de Pessoas Físicas",
+                     "Outros Recursos", "Dinheiro", "Doação para campanha",
+                     "", "", "", "", ""]
+
+    # cabeçalho real de despesas 2016, com "Número do documento" COM acento
+    cab_despesas = [
+        "Cód. Eleição", "Desc. Eleição", "Data e hora", "CNPJ Prestador Conta",
+        "Sequencial Candidato", "UF", "Sigla da UE", "Nome da UE",
+        "Sigla  Partido", "Número candidato", "Cargo", "Nome candidato",
+        "CPF do candidato", "CPF do vice/suplente", "Tipo de documento",
+        "Número do documento", "CPF/CNPJ do fornecedor", "Nome do fornecedor",
+        "Nome do fornecedor (Receita Federal)", "Cod setor econômico do fornecedor",
+        "Setor econômico do fornecedor", "Data da despesa", "Valor despesa",
+        "Tipo despesa", "Descriçao da despesa",
+    ]
+    linha_despesa = ["2", "Eleição Municipal 2016", "01/10/2016", "", "999",
+                     "RS", "12345", "MUNICIPIO TESTE", "AAA", "10123",
+                     "Vereador", "FULANO DE TAL", "11122233344", "", "Nota Fiscal",
+                     "NF1", "99988877766", "FORNECEDOR TESTE", "", "", "",
+                     "20/09/2016", "500,00", "Publicidade por materiais impressos",
+                     "Panfletos"]
+
+    _escrever_legado(
+        tmp_path / "contas" / "2016" /
+        "receitas_candidatos_prestacao_contas_final_2016_RS.txt",
+        cab_receitas, [linha_receita])
+    _escrever_legado(
+        tmp_path / "contas" / "2016" /
+        "despesas_candidatos_prestacao_contas_final_2016_RS.txt",
+        cab_despesas, [linha_despesa])
+
+    con = criar_banco(tmp_path / "legado.duckdb", recriar=True)
+    con.execute("""
+        INSERT INTO candidatos (sq_candidato, ano_eleicao, turno, cargo, uf,
+                                municipio, partido, id_lista, situacao_candidatura)
+        VALUES (999, 2016, 1, 'VEREADOR', 'RS', 'MUNICIPIO TESTE', 'AAA', 'AAA', 'APTO')
+    """)
+
+    n_rec = mod.carregar_receitas(con, 2016)
+    n_desp = mod.carregar_despesas(con, 2016)
+    assert n_rec == 1, "receita legada não foi inserida"
+    assert n_desp == 1, "despesa legada não foi inserida"
+
+    rec = con.execute("SELECT valor, fonte, data_receita, doador_tipo "
+                      "FROM receitas WHERE ano_eleicao = 2016").fetchone()
+    assert float(rec[0]) == 1234.56, "decimal brasileiro não foi convertido certo"
+    assert rec[1] == "doacao_pf", f"classificação de fonte errada: {rec[1]}"
+    assert str(rec[2]) == "2016-09-15", "data da receita não foi parseada certo"
+    assert rec[3] == "PF"
+
+    desp = con.execute("SELECT valor, categoria, data_despesa, fornecedor_tipo "
+                       "FROM despesas WHERE ano_eleicao = 2016").fetchone()
+    assert float(desp[0]) == 500.00, "decimal brasileiro não foi convertido certo (despesa)"
+    assert "PUBLICIDADE" in desp[1].upper()
+    assert str(desp[2]) == "2016-09-20"
+    assert desp[3] == "PF"
+    con.close()
+
+
+def test_receita_legada_usa_tipo_receita_nao_fonte_recurso(tmp_path, monkeypatch):
+    """Regressão do bug real encontrado em produção: 92% das receitas de
+    2016 (140.820 de 153.587) caíram no balaio 'outros' porque a
+    classificação lia a coluna 'Fonte recurso' -- que no arquivo real só
+    tem DOIS valores possíveis ('Outros Recursos' / 'Fundo Partidario'),
+    grosseiro demais -- em vez de 'Tipo receita', que é onde mora a
+    categoria detalhada de verdade.
+
+    Este teste reproduz o padrão exato do arquivo real: quatro categorias
+    diferentes de receita, todas com 'Fonte recurso' = 'Outros Recursos'
+    (constante, sem informação nenhuma para diferenciar), diferenciadas
+    SÓ por 'Tipo receita'. Se o código voltar a ler a coluna errada, as
+    quatro caem todas em 'outros' e o teste falha.
+    """
+    from python.ingest import load_to_duckdb as mod
+
+    monkeypatch.setattr(mod, "DIR_RAW", tmp_path)
+    monkeypatch.setitem(mod.FORMATO_CONTAS_LEGADO, 2016, {
+        "receitas_prefixo": "receitas_candidatos_prestacao_contas_final",
+        "despesas_prefixo": "despesas_candidatos_prestacao_contas_final",
+        "extensao": "txt",
+    })
+
+    cab = [
+        "Cód. Eleição", "Desc. Eleição", "Data e hora", "CNPJ Prestador Conta",
+        "Sequencial Candidato", "UF", "Sigla da UE", "Nome da UE",
+        "Sigla  Partido", "Numero candidato", "Cargo", "Nome candidato",
+        "CPF do candidato", "CPF do vice/suplente", "Numero Recibo Eleitoral",
+        "Numero do documento", "CPF/CNPJ do doador", "Nome do doador",
+        "Nome do doador (Receita Federal)", "Sigla UE doador",
+        "Número partido doador", "Número candidato doador",
+        "Cod setor econômico do doador", "Setor econômico do doador",
+        "Data da receita", "Valor receita", "Tipo receita", "Fonte recurso",
+        "Especie recurso", "Descricao da receita",
+        "CPF/CNPJ do doador originário", "Nome do doador originário",
+        "Tipo doador originário", "Setor econômico do doador originário",
+        "Nome do doador originário (Receita Federal)",
+    ]
+
+    def _linha(sq, tipo_receita, valor):
+        return ["2", "Eleição Municipal 2016", "01/10/2016", "", str(sq),
+                "RS", "12345", "MUNICIPIO TESTE", "AAA", "10123",
+                "Vereador", "FULANO DE TAL", "11122233344", "", f"REC{sq}",
+                f"DOC{sq}", "55566677788", "DOADOR TESTE", "", "", "", "",
+                "", "", "15/09/2016", valor, tipo_receita,
+                "Outros Recursos",  # <- constante nas quatro linhas, de propósito
+                "Dinheiro", "Doação para campanha", "", "", "", "", ""]
+
+    linhas = [
+        _linha(101, "Recursos de pessoas físicas", "100,00"),
+        _linha(101, "Recursos próprios", "200,00"),
+        _linha(101, "Recursos de partido político", "300,00"),
+        _linha(101, "Recursos de outros candidatos", "400,00"),
+    ]
+    _escrever_legado(
+        tmp_path / "contas" / "2016" /
+        "receitas_candidatos_prestacao_contas_final_2016_RS.txt",
+        cab, linhas)
+
+    con = criar_banco(tmp_path / "legado_fonte.duckdb", recriar=True)
+    con.execute("""
+        INSERT INTO candidatos (sq_candidato, ano_eleicao, turno, cargo, uf,
+                                municipio, partido, id_lista, situacao_candidatura)
+        VALUES (101, 2016, 1, 'VEREADOR', 'RS', 'MUNICIPIO TESTE', 'AAA', 'AAA', 'APTO')
+    """)
+    n = mod.carregar_receitas(con, 2016)
+    assert n == 4
+
+    fontes = dict(con.execute(
+        "SELECT valor, fonte FROM receitas WHERE ano_eleicao = 2016"
+    ).fetchall())
+    assert fontes[Decimal("100.00")] == "doacao_pf"
+    assert fontes[Decimal("200.00")] == "proprio"
+    assert fontes[Decimal("300.00")] == "doacao_partido"
+    assert fontes[Decimal("400.00")] == "doacao_partido"
+    # nenhuma das quatro pode cair em 'outros' -- se cair, é a coluna
+    # errada sendo lida de novo
+    assert "outros" not in fontes.values()
+    con.close()
+
+
+def test_glob_aceita_extensao_diferente_de_csv(tmp_path, monkeypatch):
+    """Trava de regressão para o bug real que causou silêncio no
+    --inspecionar: o glob de leitura tinha .csv fixo no código, então um
+    ano cujos arquivos são .txt (2016) parecia ter zero arquivos, quando
+    na verdade só faltava pedir a extensão certa."""
+    from python.ingest.load_to_duckdb import _glob
+    padrao_csv = _glob("contas", 2020, "receitas_candidatos")
+    padrao_txt = _glob("contas", 2016, "receitas_candidatos_prestacao_contas_final",
+                       extensao="txt")
+    assert padrao_csv.endswith(".csv")
+    assert padrao_txt.endswith(".txt")

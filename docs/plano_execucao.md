@@ -17,12 +17,20 @@ posterior, não âncora.
 | 3 | Nota metodológica e regras de decisão | **prontas, automatizadas, e já aplicadas a um resultado real** |
 | 4 | Modelo causal + bateria de robustez | **pronto**, rodado em dado real |
 | 5 | Redação dos resultados | **feita** — [`docs/resultados.md`](resultados.md) |
-| 6 | Extensões (outras UFs, outros cargos, Desenho B) | não iniciada |
+| 6 | Extensão: empilhar ciclo 2016→2020 | **feita** — executada, resultado em `resultados.md` |
+| 7 | Limites de Lee para o efeito condicional | não iniciada — nova prioridade nº1 |
+| 7 | Agrupar erro-padrão por pessoa (não só lista-disputa) | não iniciada |
+| 7 | Outras UFs, outros cargos, Desenho B | não iniciada |
 
-O recorte vereador/RS/2020→2024 está encerrado com resultado **NÃO
-IDENTIFICADO** (ver `resultados.md`). O caminho crítico agora, se o
-projeto continuar, é a fase 6 — mais ciclos eleitorais para aumentar o
-poder estatístico da amostra.
+O recorte vereador/RS fechou a 2ª rodada (painel empilhado 2016→2020 +
+2020→2024) com resultado **NÃO IDENTIFICADO** (ver `resultados.md`) —
+mesmo veredito da 1ª rodada, mas por um motivo diferente e mais
+específico. A instabilidade de sinal que bloqueava a 1ª rodada quase
+desapareceu (de τ=−0,098 para τ=−0,001 na janela mais estreita); o que
+passou a bloquear é a seleção na recandidatura, que ficou **mais forte**
+com mais dado (p caiu de 0,020 para 0,0013) — sinal de que é estrutural,
+não amostral. Isso desloca a prioridade da extensão de "mais dados" para
+"modelar a seleção explicitamente" (fase 7, limites de Lee).
 
 **Nota sobre a validação de totais:** o DivulgaCandContas é um painel
 carregado via JavaScript, sem endpoint agregável por busca automatizada
@@ -34,47 +42,64 @@ idêntico entre os dois anos (4.902 e 4.903), como deveria ser. Quem
 quiser uma comparação direta pode abrir o painel manualmente para um
 recorte específico.
 
-## Próximos passos, em ordem
+## Próximos passos, em ordem — extensão 2016→2020
 
-1. **`make inspecionar ANOS="2020 2024"`.** Compare a saída com `COLMAP`
-   em `load_to_duckdb.py` e com `FONTES` em `download_tse.py`. O TSE
-   renomeia arquivos e colunas entre anos; ajustar o mapeamento é
-   manutenção esperada, não sinal de erro.
+Os passos abaixo substituem os que valiam para a primeira execução (já
+feitos — ver histórico completo em `docs/decisoes.md`, D13). São a
+sequência para a extensão atual: empilhar o ciclo 2016→2020 ao lado do
+2020→2024 já carregado.
 
-2. **`make dados ANOS="2020 2024"`** e conferir se os CSVs do RS foram
-   extraídos nas três pastas (`candidatos`, `resultados`, `contas`).
+1. **`make inspecionar ANOS="2016"`.** O arquivo de 2016 é anterior à
+   LGPD entrar em vigor plenamente nas publicações do TSE — é esperado
+   que `NR_CPF_CANDIDATO` venha com o CPF completo (ao contrário de 2024,
+   que veio mascarado como `-4`). Confirmar isso antes de mais nada: se
+   confirmado, o pareamento 2016→2020 pode usar nível 1 (CPF), muito mais
+   confiável que nível 2 (nome + município). Comparar também
+   `DS_SITUACAO_CANDIDATURA` — é esperado que 2016 tenha valores reais
+   (`APTO`/`INAPTO`), não o sentinela `#NE` que só aparece a partir de
+   2022 (ver D13.2).
 
-3. **`make banco ANOS="2020 2024"`** e comparar os totais impressos com
-   as estatísticas de prestação de contas publicadas pelo TSE
-   (DivulgaCandContas). Divergência acima de ~2% indica problema de
-   ingestão, não arredondamento. **Não avançar enquanto não baterem** —
-   erro de carga aqui contamina tudo em silêncio.
+2. **`make dados ANOS="2016"`** — baixa e extrai só o que falta; 2020 e
+   2024 já estão em cache.
 
-   Atenção específica de 2018 vs. 2020: a EC 97/2017 vedou coligação
-   proporcional a partir de 2020, então `SQ_COLIGACAO` muda de natureza
-   entre os dois anos. Confirmar que `id_lista` continua identificando a
-   unidade que disputa as cadeiras nos dois casos.
+3. **`make banco ANOS="2016 2020 2024"` com `--recriar`.** Precisa
+   recarregar os três anos juntos porque `--recriar` apaga o banco antes
+   de popular — não dá para só "adicionar" 2016 a um banco que já tem
+   2020/2024 carregados sem `--recriar`, ou os totais de validação
+   ficariam inconsistentes com uma carga parcial anterior.
+   `carregar_tse()` já aceita lista de anos arbitrária, então isso é
+   literalmente `python -m python.ingest.load_to_duckdb --anos 2016 2020
+   2024 --uf RS --cargo VEREADOR --banco data/db/financiamento.duckdb
+   --recriar`. Conferir que o aviso de cargo-municipal-em-ano-errado
+   (D14) NÃO aparece — se aparecer, algo passou um ano de eleição geral
+   por engano.
 
-4. **Conferir manualmente umas dez listas.** Quem foi o último eleito,
-   quem foi o primeiro suplente, qual a margem. É a única forma de ter
-   certeza de que o corte intra-lista está certo no dado real — nenhum
-   teste automatizado substitui isso na primeira execução.
+4. **Conferir manualmente umas cinco listas de 2016**, mesma lógica do
+   passo 4 da execução original — o corte intra-lista precisa ser
+   validado em cada ano novo carregado, não só uma vez.
 
-5. **`make painel DE=2020 PARA=2024`** e olhar a taxa de pareamento por
-   nível. Cobertura baixa compromete o desfecho e precisa ser reportada
-   no relatório final, não escondida.
+5. **Construir os DOIS painéis, nesta ordem:**
+   ```
+   make painel DE=2016 PARA=2020
+   make painel DE=2020 PARA=2024
+   ```
+   Cada um popula `painel_link` filtrado pelo próprio par de anos —
+   rodar os dois não apaga um ao outro. Comparar a taxa de pareamento do
+   novo painel (2016→2020) com a do antigo (2020→2024, 30,2% por nome):
+   se vier sensivelmente maior (esperado, pelo CPF completo), é sinal de
+   que a hipótese do passo 1 se confirmou.
 
-6. **Olhar `outputs/tabelas/rdd_contagem_por_janela.csv`.** Se as janelas
-   estreitas tiverem poucas observações, expandir o recorte (mais anos,
-   mais UFs) **antes** de olhar qualquer estimativa.
+6. **`make analise`.** A seção "4.9 heterogeneidade por ciclo eleitoral"
+   do relatório agora vai ter dado de verdade para comparar (com um só
+   painel, ela aparecia como "[pulado]"). Ler o veredito da seção 6
+   antes de qualquer coeficiente — inclusive a nova regra de
+   heterogeneidade entre ciclos (D14).
 
-7. **Só então `make analise`.** Ler o veredito da seção 6 antes dos
-   coeficientes.
-
-8. Confrontar a estimativa principal com uma execução independente em R,
-   se houver oportunidade. O `rdrobust` em Python é a mesma implementação
-   de referência, então a divergência esperada é nula — mas conferir uma
-   vez custa pouco.
+7. **Comparar o novo `docs/resultados.md` com a versão anterior lado a
+   lado.** As perguntas que importam: o veredito mudou? Se sim, por quê
+   (a instabilidade da janela estreita sumiu com mais dado, ou a
+   heterogeneidade entre ciclos revelou outra coisa)? Documentar a
+   comparação é tão importante quanto o novo número.
 
 ## Regra de disciplina
 
@@ -108,23 +133,31 @@ melhorias possíveis, não pendências.
 
 ## Extensões, em ordem de custo-benefício
 
-1. **Mais ciclos eleitorais (2016, 2018, 2022).** É a extensão mais
-   direta e a que mais provavelmente resolve a instabilidade na janela
-   mais estreita observada em `resultados.md` — mais observações dão
-   mais poder estatístico exatamente onde a amostra atual é fraca.
-   Decisão a tomar **antes** de rodar de novo, não depois de ver se
-   "ajuda" o resultado.
-2. **Limites de Lee** para o efeito condicional a recandidatar-se, em
+1. **~~Mais ciclos eleitorais~~ → em andamento** (ver seção "Próximos
+   passos" acima). Corrigido: só 2016 e 2012 são ciclos municipais
+   anteriores válidos para vereador — 2018 e 2022 são eleições gerais e
+   não têm essa candidatura (ver `docs/decisoes.md`, D14).
+2. **2012, se 2016 não resolver.** Mesmo procedimento do 2016, um passo
+   mais para trás. Guardado como próxima carta, não como parte do plano
+   atual — melhor esgotar um incremento de cada vez e ler o resultado
+   antes de decidir se vale acrescentar mais um ciclo.
+3. **Limites de Lee** para o efeito condicional a recandidatar-se, em
    vez de só reportar que a regra bloqueou por seleção de amostra.
-3. **Demais UFs.** O código não tem nada específico do RS além de um
+4. **Agrupar erro-padrão por pessoa**, não só por lista-disputa, quando
+   o painel empilhado tiver muita gente que disputou 3+ eleições — a
+   mesma pessoa em dois pares diferentes (2016→2020 e 2020→2024) não é
+   uma observação independente (ver D14, "cuidado de desenho").
+5. **Demais UFs.** O código não tem nada específico do RS além de um
    argumento de linha de comando.
-4. **Deputado estadual (2018, 2022).** A mesma lógica intra-lista se
-   aplica; muda o tamanho da lista e a unidade geográfica.
-5. **Modelar suplência.** Suplentes assumem cadeira com alguma
+6. **Deputado estadual.** A mesma lógica intra-lista se aplica; muda o
+   tamanho da lista e a unidade geográfica. Cargo de eleição geral —
+   usar os anos 2018, 2022, 2026, não os municipais.
+7. **Modelar suplência.** Suplentes assumem cadeira com alguma
    frequência, o que atenua o efeito estimado. Tratar como tratamento
    parcial é um refinamento com literatura própria.
-6. **Deflação mensal** por data de transação, em vez de índice anual.
-7. **Desenho B** (efeito do gasto sobre voto) via limiares populacionais
+8. **Deflação mensal** por data de transação, em vez de índice anual.
+9. **Desenho B** (efeito do gasto sobre voto) via limiares populacionais
    de teto de gasto — projeto próprio, ver nota metodológica, seção 11.
-8. **Eleição de 2026**, quando as contas estiverem consolidadas. É
-   atualização do pipeline existente, não projeto novo.
+10. **Eleição de 2028**, quando as contas estiverem consolidadas (a
+    próxima municipal). É atualização do pipeline existente, não
+    projeto novo.

@@ -16,12 +16,14 @@ identificável — que por acaso é justamente o mecanismo que torna a
 correlação enganosa.
 
 > ⚠️ **Status:** pipeline completo, validado contra dados sintéticos com
-> efeito causal conhecido e executado sobre dados reais do TSE (vereador,
-> RS, 2020→2024). **A regra de decisão pré-registrada classificou o
-> resultado como NÃO IDENTIFICADO** — há um sinal positivo consistente
-> em quase toda a varredura de robustez, mas não com a estabilidade que
-> o desenho exige. Relatório completo em
-> [`docs/resultados.md`](docs/resultados.md). Ver
+> efeito causal conhecido e executado sobre dados reais do TSE — vereador,
+> RS, painel empilhado de duas transições eleitorais (2016→2020 e
+> 2020→2024, n=9.275). **A regra de decisão pré-registrada classificou o
+> resultado como NÃO IDENTIFICADO**, mas dobrar a amostra mudou o que
+> isso significa: a instabilidade de sinal quase desapareceu e o efeito
+> ficou mais preciso (τ = +0,085, p = 0,152) — o obstáculo real passou a
+> ser a seleção de quem se recandidata, não o tamanho da amostra.
+> Relatório completo em [`docs/resultados.md`](docs/resultados.md). Ver
 > [Estado atual](#estado-atual).
 
 ---
@@ -57,10 +59,10 @@ esquerda do tracejado, quem ficou de fora; à direita, quem se elegeu. Se
 vencer não tivesse efeito nenhum, as duas linhas se encontrariam no
 corte. O tamanho do degrau é a estimativa causal.
 
-*(Figura gerada com dados reais — vereador, RS, 2020→2024. O resultado
-não atingiu a robustez exigida pela regra de decisão pré-registrada;
-ver [`docs/resultados.md`](docs/resultados.md) para a leitura completa
-antes de interpretar o degrau visualmente.)*
+*(Figura gerada com dados reais — vereador, RS, painel empilhado
+2016→2020 + 2020→2024. O resultado não atingiu a robustez exigida pela
+regra de decisão pré-registrada; ver [`docs/resultados.md`](docs/resultados.md)
+para a leitura completa antes de interpretar o degrau visualmente.)*
 
 ---
 
@@ -104,7 +106,7 @@ cd financiamento-eleitoral-rs
 pip install -r requirements.txt
 
 make demo     # pipeline inteiro em dados sintéticos, ~1 min, sem download
-make test     # 44 testes, incluindo recuperação de um efeito conhecido
+make test     # 53 testes, incluindo recuperação de um efeito conhecido
 ```
 
 Com dados reais do TSE (o download é pesado):
@@ -173,9 +175,9 @@ que um obviamente quebrado, porque não convida a verificação.
   Eleitoral.
 - **Não trata resultado nulo como fracasso.** Se a robustez não sustentar
   um efeito, isso é reportado como tal — e é exatamente o que aconteceu
-  no recorte atual (vereador, RS, 2020→2024): a regra de decisão
-  classificou o resultado como não identificado, apesar de um sinal
-  positivo consistente na maior parte da robustez. Ver
+  no recorte atual (vereador, RS, painel 2016→2020 + 2020→2024): a regra
+  de decisão classificou o resultado como não identificado, apesar de um
+  sinal positivo consistente na maior parte da robustez. Ver
   [`docs/resultados.md`](docs/resultados.md) para a leitura completa.
 - **Não tem vínculo institucional.** Projeto pessoal, dados públicos.
 
@@ -199,7 +201,7 @@ docs/
   plano_execucao.md              o que falta, em ordem
   dicionario_dados.md            tabelas, views e colunas
   decisoes.md                    decisões de projeto, com a razão de cada uma
-tests/                           44 testes de integridade e de recuperação do efeito
+tests/                           53 testes de integridade e de recuperação do efeito
 ```
 
 ## Notas sobre os dados
@@ -220,12 +222,12 @@ tests/                           44 testes de integridade e de recuperação do 
 | Etapa | Situação |
 |---|---|
 | Schema, camada SQL e deflator | pronto |
-| Ingestão do TSE | **testada e rodando contra o servidor real** (vereador, RS, 2020/2024) |
-| Pareamento do painel entre eleições | pronto — 30,2% de cobertura no recorte atual |
-| Modelo causal + bateria de robustez | pronto, rodado em dado real |
-| Regras de decisão pré-registradas | prontas, automatizadas, e já aplicadas a um resultado real |
-| Validação em dados sintéticos | pronta, 44 testes passando |
-| Execução em dados reais | **feita** — resultado: NÃO IDENTIFICADO, ver [`docs/resultados.md`](docs/resultados.md) |
+| Ingestão do TSE | **testada e rodando contra o servidor real** (vereador, RS, 2016/2020/2024 — inclusive o formato legado de 2016) |
+| Pareamento do painel entre eleições | pronto — 2016→2020 com 99,4% de cobertura por CPF; 2020→2024 com 30,2% por nome |
+| Modelo causal + bateria de robustez | pronto, rodado em painel empilhado real (2 ciclos) |
+| Regras de decisão pré-registradas | prontas, automatizadas, incluindo teste de heterogeneidade entre ciclos |
+| Validação em dados sintéticos | pronta, 53 testes passando |
+| Execução em dados reais | **feita, 2ª rodada** — resultado: NÃO IDENTIFICADO (mais preciso que a 1ª), ver [`docs/resultados.md`](docs/resultados.md) |
 | Desenho B (efeito do gasto sobre voto) | ver nota metodológica, seção 11 |
 
 O código de download foi escrito a partir da estrutura conhecida do

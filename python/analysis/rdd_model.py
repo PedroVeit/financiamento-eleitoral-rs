@@ -303,6 +303,52 @@ def teste_donut(df: pd.DataFrame, desfecho: str, running: str = RUNNING_PADRAO,
     return pd.DataFrame(linhas)
 
 
+def teste_heterogeneidade_por_ciclo(df: pd.DataFrame, desfecho: str,
+                                    running: str = RUNNING_PADRAO,
+                                    coluna_ciclo: str = "ano_eleicao",
+                                    **kw) -> pd.DataFrame:
+    """Estima o efeito separadamente para cada ciclo eleitoral de origem
+    (cada ano_t empilhado no painel) e compara com o pooled.
+
+    Existe para responder uma pergunta específica de quando o projeto
+    passa a empilhar mais de um par de eleições (ex.: 2016->2020 e
+    2020->2024): o efeito pooled pode estar escondendo que ele só existe
+    num dos ciclos, ou que os ciclos apontam em direções opostas. Um
+    efeito que aparece em todos os ciclos testados separadamente é muito
+    mais convincente que um pooled que soma um ciclo positivo forte com
+    um neutro.
+
+    IMPORTANTE: o painel inclui candidaturas de TODOS os anos carregados
+    como t0 -- inclusive as do ano mais recente, que nunca têm par de
+    saída (ex.: candidatura de 2024 não tem "eleição seguinte" enquanto
+    2028 não for carregado). Por isso a função descarta primeiro as
+    linhas em que `desfecho` é nulo, e só então agrupa por ciclo -- do
+    contrário o "último ano carregado" apareceria como um ciclo
+    degenerado, sem nenhuma observação real. Isso pressupõe que o
+    desfecho usa NULL para "não observado" (como ln_receita_t1_cond);
+    um desfecho que usa 0 para essa mesma situação (como concorreu_t1)
+    não se beneficia dessa proteção -- não é como este projeto o utiliza,
+    mas vale checar antes de reaproveitar a função noutro contexto.
+
+    Não precisa de pelo menos dois ciclos para rodar (com um só, devolve
+    uma linha e nada a comparar) -- mas só ganha poder de diagnóstico
+    quando há mais de um.
+    """
+    linhas = []
+    if coluna_ciclo not in df.columns or desfecho not in df.columns:
+        return pd.DataFrame(linhas)
+    com_desfecho = df.dropna(subset=[desfecho])
+    for ciclo, sub in com_desfecho.groupby(coluna_ciclo):
+        try:
+            d = estimar_rdd(sub, desfecho, running, **kw).como_dict()
+            d["ciclo"] = ciclo
+            linhas.append(d)
+        except (ValueError, np.linalg.LinAlgError) as e:
+            linhas.append({"desfecho": desfecho, "ciclo": ciclo, "tau": np.nan,
+                           "erro": str(e)[:80]})
+    return pd.DataFrame(linhas)
+
+
 def teste_densidade(df: pd.DataFrame, running: str = RUNNING_PADRAO) -> dict:
     """Manipulação da variável de corte (Cattaneo-Jansson-Ma, sucessor do
     McCrary). H0: densidade contínua no corte. Rejeitar sugere que os

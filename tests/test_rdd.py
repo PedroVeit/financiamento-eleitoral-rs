@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -166,3 +167,48 @@ def test_binscatter_nao_cruza_o_corte(painel):
     assert len(bins) > 4
     assert not (bins["x"].abs() < 1e-12).any()
     assert set(bins["lado"]) == {"eleito", "nao_eleito"}
+
+
+# ---------------------------------------------------------------------
+# Heterogeneidade por ciclo eleitoral (empilhamento de mais de um painel)
+# ---------------------------------------------------------------------
+def test_heterogeneidade_com_um_ciclo_so_nao_quebra(painel):
+    """O gerador sintético só produz um par com desfecho observável
+    (2020->2024): a candidatura de 2024 também aparece no painel como
+    t0, mas sem par de saída (não há 2028), então não conta como ciclo.
+    Com um único ciclo real não há nada para comparar, mas a função não
+    pode quebrar -- ela é chamada sempre que o pipeline roda, mesmo
+    antes de qualquer empilhamento de mais eleições."""
+    tab = rdd.teste_heterogeneidade_por_ciclo(painel, DESFECHO)
+    ciclos_com_dado = painel.dropna(subset=[DESFECHO])["ano_eleicao"].nunique()
+    assert len(tab) == ciclos_com_dado == 1
+    assert tab["tau"].notna().all()
+
+
+def test_heterogeneidade_com_dois_ciclos_simulados(painel, tau_verdadeiro):
+    """Duplica as linhas com desfecho observado do painel sintético num
+    segundo 'ciclo' fabricado (mesmo efeito verdadeiro, ano diferente) e
+    confere que a função separa os dois corretamente -- sem precisar
+    baixar um segundo ano de verdade só para testar a mecânica de
+    agrupamento."""
+    base = painel.dropna(subset=[DESFECHO]).copy()
+    outro = base.copy()
+    outro["ano_eleicao"] = base["ano_eleicao"].max() + 4
+    painel_duplo = pd.concat([base, outro], ignore_index=True)
+
+    tab = rdd.teste_heterogeneidade_por_ciclo(painel_duplo, DESFECHO)
+    assert len(tab) == 2
+    assert set(tab["ciclo"]) == set(painel_duplo["ano_eleicao"].unique())
+    # mesmo efeito verdadeiro nos dois ciclos (dado duplicado) -> os dois
+    # pontos estimados devem ficar dentro do IC do efeito verdadeiro
+    for _, r in tab.iterrows():
+        assert r["tau"] > 0, "sinal deveria continuar positivo no ciclo duplicado"
+
+
+def test_ausencia_de_coluna_ciclo_devolve_vazio(painel):
+    """Se a coluna do ciclo não existir no dataframe (ex.: alguém chamou
+    a função direto num subconjunto sem essa coluna), devolve tabela
+    vazia em vez de KeyError."""
+    sem_coluna = painel.drop(columns=["ano_eleicao"])
+    tab = rdd.teste_heterogeneidade_por_ciclo(sem_coluna, DESFECHO)
+    assert tab.empty

@@ -145,6 +145,42 @@ def test_regra_alerta_quando_estimadores_divergem():
     assert any("divergem" in a for a in v.alertas)
 
 
+def test_regra_bloqueia_com_ciclos_significativos_e_opostos():
+    """Dois ciclos, cada um individualmente significativo, com sinais
+    opostos: contradição real, não ruído -- tem de bloquear."""
+    r = _relatorio_base()
+    r["heterogeneidade_ciclo"] = [
+        {"ciclo": 2020, "tau": 0.45, "p_valor": 0.01},
+        {"ciclo": 2016, "tau": -0.38, "p_valor": 0.02},
+    ]
+    v = regras.avaliar(r, "ln_receita_t1_cond")
+    assert v.status == "NAO_IDENTIFICADO"
+    assert any("ciclo" in m for m in v.motivos)
+
+
+def test_regra_alerta_com_sinais_diferentes_mas_nao_ambos_significativos():
+    """Sinais diferentes entre ciclos, mas só um é significativo --
+    compatível com ruído de amostra por ciclo. Alerta, não bloqueio:
+    dois grupos têm bem menos poder para revelar tendência que os sete
+    pontos da varredura de janela."""
+    r = _relatorio_base()
+    r["heterogeneidade_ciclo"] = [
+        {"ciclo": 2020, "tau": 0.45, "p_valor": 0.01},
+        {"ciclo": 2016, "tau": -0.05, "p_valor": 0.80},
+    ]
+    v = regras.avaliar(r, "ln_receita_t1_cond")
+    assert v.status == "IDENTIFICADO"
+    assert any("ciclo" in a for a in v.alertas)
+
+
+def test_regra_ignora_heterogeneidade_com_um_ciclo_so():
+    r = _relatorio_base()
+    r["heterogeneidade_ciclo"] = [{"ciclo": 2020, "tau": 0.45, "p_valor": 0.01}]
+    v = regras.avaliar(r, "ln_receita_t1_cond")
+    assert v.status == "IDENTIFICADO"
+    assert not any("ciclo" in m for m in v.motivos + v.alertas)
+
+
 # ---------------------------------------------------------------------
 # Deflator
 # ---------------------------------------------------------------------

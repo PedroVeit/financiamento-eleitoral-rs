@@ -49,7 +49,19 @@ SAL = os.environ.get("FIN_HASH_SAL", "sal-de-desenvolvimento-trocar-antes-de-pub
 
 OPCOES_CSV = (
     "delim=';', header=true, encoding='latin-1', "
-    "union_by_name=true, all_varchar=true, ignore_errors=true"
+    "union_by_name=true, all_varchar=true, ignore_errors=true, "
+    # quote/escape fixados explicitamente, não deixados para o sniffer do
+    # DuckDB adivinhar. Descoberto ao carregar o .txt de despesas de 2016
+    # (150 MB): a autodetecção errou o caractere de aspas nesse arquivo
+    # específico, e cada nome de coluna saiu com as aspas LITERAIS dentro
+    # do texto (ex.: '"Sequencial Candidato"', aspas inclusas), fazendo
+    # todo _pick() falhar em silêncio e a carga de despesas voltar 0 sem
+    # erro nenhum. O sniffer amostra só um pedaço do arquivo; em arquivos
+    # grandes o suficiente, um trecho ambíguo na amostra basta para errar
+    # a detecção do arquivo inteiro. Todos os arquivos do TSE usam aspas
+    # duplas para quiar e escapar campos -- fixar isso é estritamente mais
+    # seguro que confiar na adivinhação, em qualquer ano.
+    "quote='\"', escape='\"'"
 )
 
 # Alternativas de nome de coluna por conceito. A primeira que existir vence.
@@ -101,14 +113,24 @@ def _pick(cols: set[str], alternativas: list[str], default: str = "NULL") -> str
 
 
 def _hash_sql(expr: str) -> str:
-    """SHA-256 salgado dos dígitos de um documento. NULL se vazio."""
+    """SHA-256 salgado dos dígitos de um documento.
+
+    NULL se vazio OU se sobrar menos de 9 dígitos após limpar o texto.
+    O TSE às vezes preenche o campo com um código sentinela (ex.: '-4')
+    quando o dado não é publicado (privacidade). Sem esse piso de 9
+    dígitos, '-4' viraria o dígito '4' e seria tratado como documento
+    válido — e como o sentinela é igual para todo mundo, todo mundo
+    ganharia o MESMO hash, o que quebraria silenciosamente o
+    pareamento por CPF (ver docs/decisoes.md, D7).
+    """
     digitos = f"regexp_replace(COALESCE({expr}, ''), '[^0-9]', '', 'g')"
     return (f"CASE WHEN length({digitos}) >= 9 "
             f"THEN sha256('{SAL}' || {digitos}) END")
 
 
-def _glob(subpasta: str, ano: int, prefixo: str) -> str:
-    return str(DIR_RAW / subpasta / str(ano) / f"{prefixo}_{ano}*.csv").replace("\\", "/")
+def _glob(subpasta: str, ano: int, prefixo: str, extensao: str = "csv") -> str:
+    return str(DIR_RAW / subpasta / str(ano) /
+               f"{prefixo}*.{extensao}").replace("\\", "/")
 
 
 # ---------------------------------------------------------------------
@@ -253,7 +275,123 @@ def _valor(expr: str) -> str:
     return f"TRY_CAST(REPLACE(REPLACE({expr}, '.', ''), ',', '.') AS DECIMAL(18,2))"
 
 
+# ---------------------------------------------------------------------
+# Formato legado de prestação de contas (anos < 2018)
+#
+# Antes da padronização do TSE em códigos ALLCAPS (ANO_ELEICAO,
+# SQ_CANDIDATO, VR_RECEITA...), a prestação de contas era publicada com
+# cabeçalho em português por extenso, sem coluna de ano (o ano vem do
+# nome do pacote, não de uma coluna) e com nomes de arquivo diferentes
+# (despesas_candidatos_prestacao_contas_final_2016_RS.txt, não
+# despesas_contratadas_candidatos_2016_RS.csv). O restante do pipeline
+# (schema, views, deflator, RDD) não muda nada -- só a extração destas
+# duas tabelas precisa de um caminho de leitura à parte.
+#
+# Cuidado real que já mordeu uma vez: o nome da coluna do número do
+# documento é "Numero do documento" (SEM acento) no arquivo de
+# RECEITAS e "Número do documento" (COM acento) no de DESPESAS. É o
+# tipo de inconsistência que o TSE introduz sem aviso -- por isso cada
+# mapa abaixo é escrito por extenso em vez de composto por concatenação
+# de string, mais fácil de auditar visualmente.
+FORMATO_CONTAS_LEGADO: dict[int, dict[str, str]] = {
+    2016: {
+        "receitas_prefixo": "receitas_candidatos_prestacao_contas_final",
+        "despesas_prefixo": "despesas_candidatos_prestacao_contas_final",
+        "extensao": "txt",
+    },
+    # 2012 provavelmente segue o mesmo padrão -- confirmar com
+    # --inspecionar antes de assumir; NÃO herdar esta entrada sem checar.
+}
+
+COLMAP_LEGADO_RECEITAS = {
+    "sq_candidato": ["Sequencial Candidato"],
+    "id_receita":   ["Numero Recibo Eleitoral"],
+    "origem":       ["Descricao da receita", "Especie recurso"],
+    # "Tipo receita" é a categoria detalhada (Recursos de pessoas físicas,
+    # Recursos próprios, Recursos de partido político, Recursos de outros
+    # candidatos...) -- é ISSO que alimenta a classificação. "Fonte
+    # recurso" em 2016 só tem dois valores possíveis ("Outros Recursos" /
+    # "Fundo Partidario"), grosseiro demais para classificar sozinho, mas
+    # entra em `fonte_coarse` só para constar na auditoria.
+    #
+    # Bug real que isso corrige: a versão anterior lia só "Fonte recurso"
+    # como `fonte`, o que jogou 140.820 de 153.587 receitas de 2016 (92%)
+    # no balaio "outros" -- não porque o texto fosse desconhecido, mas
+    # porque a coluna lida nunca continha o texto informativo. Ver
+    # docs/decisoes.md, D17.
+    "fonte":        ["Tipo receita"],
+    "fonte_coarse": ["Fonte recurso"],
+    "valor":        ["Valor receita"],
+    "data":         ["Data da receita"],
+    "doc_doador":   ["CPF/CNPJ do doador"],
+}
+
+COLMAP_LEGADO_DESPESAS = {
+    "sq_candidato":    ["Sequencial Candidato"],
+    "id_despesa":      ["Número do documento"],   # ATENÇÃO: com acento aqui
+    "categoria":       ["Tipo despesa", "Descriçao da despesa"],
+    "valor":           ["Valor despesa"],
+    "data":            ["Data da despesa"],
+    "doc_fornecedor":  ["CPF/CNPJ do fornecedor"],
+}
+
+
+def _carregar_receitas_legado(con, ano: int, padrao: str) -> int:
+    cols = _colunas(con, padrao)
+    c = {k: _pick(cols, v) for k, v in COLMAP_LEGADO_RECEITAS.items()}
+    con.execute(f"""
+        INSERT INTO receitas
+        SELECT
+            {c['id_receita']}                                   AS id_receita,
+            TRY_CAST({c['sq_candidato']} AS BIGINT)              AS sq_candidato,
+            {ano}                                                AS ano_eleicao,
+            {_case_fonte(c['origem'], c['fonte'])}               AS fonte,
+            COALESCE({c['fonte']}, '') || ' | ' || COALESCE({c['origem']}, '')
+                || ' | ' || COALESCE({c['fonte_coarse']}, '')    AS origem_bruta,
+            {_valor(c['valor'])}                                 AS valor,
+            TRY_STRPTIME({c['data']}, '%d/%m/%Y')::DATE          AS data_receita,
+            {_hash_sql(c['doc_doador'])}                         AS doador_hash,
+            CASE WHEN length(regexp_replace(COALESCE({c['doc_doador']}, ''),
+                                            '[^0-9]', '', 'g')) = 14
+                 THEN 'PJ' ELSE 'PF' END                         AS doador_tipo
+        FROM read_csv('{padrao}', {OPCOES_CSV})
+        WHERE TRY_CAST({c['sq_candidato']} AS BIGINT) IN
+              (SELECT sq_candidato FROM candidatos WHERE ano_eleicao = {ano})
+    """)
+    return con.execute("SELECT COUNT(*) FROM receitas WHERE ano_eleicao = ?",
+                       [ano]).fetchone()[0]
+
+
+def _carregar_despesas_legado(con, ano: int, padrao: str) -> int:
+    cols = _colunas(con, padrao)
+    c = {k: _pick(cols, v) for k, v in COLMAP_LEGADO_DESPESAS.items()}
+    con.execute(f"""
+        INSERT INTO despesas
+        SELECT
+            {c['id_despesa']}                                   AS id_despesa,
+            TRY_CAST({c['sq_candidato']} AS BIGINT)              AS sq_candidato,
+            {ano}                                                AS ano_eleicao,
+            {c['categoria']}                                    AS categoria,
+            {_valor(c['valor'])}                                 AS valor,
+            TRY_STRPTIME({c['data']}, '%d/%m/%Y')::DATE          AS data_despesa,
+            {_hash_sql(c['doc_fornecedor'])}                     AS fornecedor_hash,
+            CASE WHEN length(regexp_replace(COALESCE({c['doc_fornecedor']}, ''),
+                                            '[^0-9]', '', 'g')) = 14
+                 THEN 'PJ' ELSE 'PF' END                         AS fornecedor_tipo
+        FROM read_csv('{padrao}', {OPCOES_CSV})
+        WHERE TRY_CAST({c['sq_candidato']} AS BIGINT) IN
+              (SELECT sq_candidato FROM candidatos WHERE ano_eleicao = {ano})
+    """)
+    return con.execute("SELECT COUNT(*) FROM despesas WHERE ano_eleicao = ?",
+                       [ano]).fetchone()[0]
+
+
 def carregar_receitas(con, ano: int) -> int:
+    if ano in FORMATO_CONTAS_LEGADO:
+        cfg = FORMATO_CONTAS_LEGADO[ano]
+        padrao = _glob("contas", ano, cfg["receitas_prefixo"], cfg["extensao"])
+        return _carregar_receitas_legado(con, ano, padrao)
+
     padrao = _glob("contas", ano, "receitas_candidatos")
     cols = _colunas(con, padrao)
     sq = _pick(cols, ["SQ_CANDIDATO"])
@@ -283,6 +421,11 @@ def carregar_receitas(con, ano: int) -> int:
 
 
 def carregar_despesas(con, ano: int) -> int:
+    if ano in FORMATO_CONTAS_LEGADO:
+        cfg = FORMATO_CONTAS_LEGADO[ano]
+        padrao = _glob("contas", ano, cfg["despesas_prefixo"], cfg["extensao"])
+        return _carregar_despesas_legado(con, ano, padrao)
+
     padrao = _glob("contas", ano, "despesas_contratadas_candidatos")
     cols = _colunas(con, padrao)
     sq = _pick(cols, ["SQ_CANDIDATO"])
@@ -308,7 +451,22 @@ def carregar_despesas(con, ano: int) -> int:
                        [ano]).fetchone()[0]
 
 
+#: Cargos municipais (vereador, prefeito) só têm candidatura em anos
+#: múltiplos de 4 (2012, 2016, 2020, 2024...). Pedir esses cargos num ano
+#: de eleição geral (2018, 2022, 2026...) não dá erro no download -- o
+#: arquivo existe, só não tem nenhuma linha desse cargo -- e por isso o
+#: engano passa despercebido se não for avisado aqui.
+CARGOS_MUNICIPAIS = {"VEREADOR", "PREFEITO", "VICE-PREFEITO"}
+
+
 def carregar_tse(con, anos: list[int], cargo: str = "VEREADOR", uf: str = "RS") -> None:
+    if cargo.upper() in CARGOS_MUNICIPAIS:
+        fora = [a for a in anos if a % 4 != 0]
+        if fora:
+            print(f"  [aviso] {cargo} é cargo municipal (só concorre em anos "
+                  f"múltiplos de 4). Não deve haver candidaturas em {fora} -- "
+                  f"confira se não é o ano errado antes de interpretar 0 "
+                  f"candidaturas como bug.")
     for ano in anos:
         print(f"\n=== carregando {ano} ({cargo}/{uf}) ===")
         print(f"  candidatos : {carregar_candidatos(con, ano, cargo, uf):>9,}")

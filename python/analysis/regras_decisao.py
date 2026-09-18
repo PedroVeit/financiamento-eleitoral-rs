@@ -130,6 +130,34 @@ def avaliar(relatorio: dict, desfecho_principal: str) -> Veredito:
                     f"entre as janelas testadas — reportar a varredura inteira, não "
                     f"só a banda ótima")
 
+    # -- 4b. heterogeneidade por ciclo eleitoral -----------------------
+    # Tratamento mais permissivo que a varredura de janela de propósito:
+    # a varredura tem 7 pontos para revelar uma tendência; aqui, com
+    # normalmente só 2 ou 3 ciclos empilhados, um mero desacordo de sinal
+    # no ponto estimado tem pouca força de evidência por si só. Só bloqueia
+    # quando os dois ciclos são INDIVIDUALMENTE significativos E com
+    # sinais opostos -- isso sim é contradição real, não ruído esperado.
+    het = pd.DataFrame(relatorio.get("heterogeneidade_ciclo", []))
+    if not het.empty and "tau" in het and "p_valor" in het:
+        het_validos = het.dropna(subset=["tau", "p_valor"])
+        if len(het_validos) >= 2:
+            sig = het_validos[het_validos["p_valor"] < ALFA]
+            if len(sig) >= 2 and not (sig["tau"] > 0).all() and not (sig["tau"] < 0).all():
+                bloqueado = True
+                ciclos_str = ", ".join(f"{r.ciclo}: τ={r.tau:+.3f} (p={r.p_valor:.3f})"
+                                       for r in sig.itertuples())
+                motivos.append(
+                    f"o efeito é significativo em mais de um ciclo eleitoral, mas "
+                    f"com sinais opostos entre eles ({ciclos_str}): o efeito pooled "
+                    f"estaria escondendo uma contradição real, não descrevendo um "
+                    f"fenômeno comum aos dois")
+            elif (het_validos["tau"] > 0).any() and (het_validos["tau"] < 0).any():
+                alertas.append(
+                    "o ponto estimado difere de sinal entre ciclos eleitorais, mas "
+                    "sem que os dois sejam significativos ao mesmo tempo -- "
+                    "compatível com ruído de amostra por ciclo; reportar a tabela "
+                    "por ciclo junto com o pooled")
+
     # -- 5. seleção de amostra pelo tratamento ------------------------
     est = pd.DataFrame(relatorio.get("estimativas", []))
     if not est.empty and "desfecho" in est:
