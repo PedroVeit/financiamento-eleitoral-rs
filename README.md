@@ -42,7 +42,7 @@ CSVs do TSE ──▶ DuckDB (SQL) ──▶ variável de corte ──▶ RDD (P
 - **Python** faz pareamento entre eleições, estimação causal (`rdrobust`
   + estimador próprio), bateria de robustez e regras de decisão
   pré-registradas que classificam automaticamente o resultado.
-- **53 testes automatizados**, incluindo validação contra um efeito
+- **69 testes automatizados**, incluindo validação contra um efeito
   causal conhecido em dados sintéticos antes de qualquer execução real.
 
 ## Resultado principal
@@ -59,12 +59,26 @@ mesmo tempo — sinal de que a primeira estimativa estava parcialmente
 inflada por ruído. Relatório completo, bateria de robustez e a leitura
 honesta do resultado em [`docs/resultados.md`](docs/resultados.md).
 
+## Contexto: quanto da vantagem de quem vence é do mandato?
+
+| | diferença na receita seguinte |
+|---|---|
+| Comparação simples, vencedores × perdedores | **+38%** |
+| Efeito causal (RDD) | **+9%** (IC 95%: −4% a +26%) |
+
+A maior parte da vantagem aparente de quem vence parece vir de seleção, não
+do mandato. No mesmo período, a fatia de dinheiro público (FEFC + Fundo
+Partidário) na receita de campanha foi de **7% (2016) → 38% (2020) → 65%
+(2024)**. Nenhum resultado é recortado por partido ou candidato.
+
+![Bruto vs causal](outputs/figures/ctx_bruto_vs_causal.png)
+
 ## Rodar localmente
 
 ```bash
 pip install -r requirements.txt
 make demo     # pipeline completo em dados sintéticos, ~1 min
-make test     # 53 testes
+make test     # 69 testes
 ```
 
 Com dados reais do TSE, ver o passo a passo em

@@ -431,3 +431,36 @@ só `"Tipo receita"` variando — replica o padrão real e não deixa
 margem para esse tipo de acidente de novo.
 
 **Suíte total: 53 testes.**
+
+
+## D18 — FEFC classificado como repasse de partido
+
+**O que aconteceu:** ao rodar a camada de contexto com dados reais, o
+Fundo Eleitoral (FEFC) saiu com **0,0%** da receita em 2020 e 2024 — o
+que contradiz um fato conhecido (foi a maior fonte de recursos nesses
+pleitos). Quem pegou o erro foi uma verificação de sanidade do resultado,
+não a validação de carga.
+
+**Causa:** dois defeitos em `_case_fonte`. (1) O padrão procurava
+`FUNDO ESPECIAL DE FINANCIAMENTO`, mas o texto real do TSE é
+`FUNDO ESPECIAL`; o FEFC caía em "repasse de partido" (R$ 97,8 mi só em
+2024). (2) Em 2016 o Fundo Partidário vem na coluna `Fonte recurso`, que
+(desde D17) não entrava na classificação.
+
+**Correção:** padrão `%FUNDO ESPECIAL%`; `_case_fonte` aceita coluna
+extra, usada no formato legado; `corrigir_fonte.py` reclassifica o banco
+existente a partir de `origem_bruta`, sem recarregar, abortando se o total
+de receita mudar.
+
+**Impacto:** nenhum nos totais nem no τ principal. `share_fefc_t` e
+`share_fefc_t1` passaram a ser estimáveis (antes davam erro numérico por
+coluna constante em zero).
+
+**Por que não caiu antes:** o gerador sintético usava o texto longo
+(`Fundo Especial de Financiamento de Campanha`), que casava com o padrão
+errado — mesma lição de D17: dado sintético escrito antes de ver o
+arquivo real herda a suposição do autor. Agora há teste com as strings
+reais (`tests/test_classificacao_fonte.py`) e um alerta em
+`contexto.checar_fefc` quando o share fica ~0 em ano municipal ≥ 2020.
+
+**Suíte total: 69 testes.**

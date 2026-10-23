@@ -149,7 +149,7 @@ como esperado, entre os dois.
 | Donut (exclui observações coladas no corte) | τ estável: 0,085 → 0,090 → 0,086 | efeito não depende de casos colados no corte |
 | Normalização alternativa (margem/disputa vs. margem/lista) | τ cai para 0,056, não significativo | sensível à normalização — mesma ressalva da 1ª rodada |
 | Amostra restrita à fronteira da lista | τ = 0,134, p = 0,067 | no limiar, mesmo padrão do pooled |
-| Continuidade de covariáveis pré-tratamento | 5 de 6 passam; `idade_posse` salta (p=0,013); `share_fefc_t` não computou | uma falha em 6 é esperada por acaso, mas registrada |
+| Continuidade de covariáveis pré-tratamento | 5 de 6 passam; `idade_posse` salta (p=0,013); `share_fefc_t` passa (p=0,97) | uma falha em 6 é esperada por acaso, mas registrada |
 | Heterogeneidade entre ciclos (novo) | 2016 e 2020 mesmo sinal, nenhum contradiz o outro | reforça que o efeito não é artefato de um ciclo específico |
 
 ---
@@ -189,8 +189,10 @@ como zero.
    município (nível 2, mais frágil) porque o CPF de 2024 não é publicado
    integralmente (D13.3). O painel empilhado herda essa heterogeneidade
    de qualidade entre metades.
-2. **`share_fefc_t1`** continua sem estimar (erro numérico de matriz
-   quase singular) — não bloqueia a conclusão principal.
+2. **Classificação de fonte corrigida depois da 2ª rodada (D18).** O FEFC
+   estava sendo contado como repasse de partido; após a correção,
+   `share_fefc_t` e `share_fefc_t1` passam a ser estimáveis. O τ principal
+   não muda (os totais de receita são os mesmos).
 3. **Formato de dado de 2016 exigiu mapeamento próprio** (cabeçalhos em
    português por extenso, sem coluna de ano, arquivos `.txt` em vez de
    `.csv` — D15, D16, D17). Testado, mas é uma superfície de código maior
@@ -218,3 +220,38 @@ como zero.
    qualquer coisa).
 4. **Expandir para outras UFs** — código já parametrizado, é custo
    operacional, não redesenho.
+
+---
+
+## Camada de contexto (adicionada depois da 2ª rodada)
+
+Duas perguntas descritivas, sem nenhum recorte por partido, candidato ou
+ideologia (`sql/04_contexto_sistema.sql`, `python/analysis/contexto.py`).
+
+**1. Peso do dinheiro público** (FEFC + Fundo Partidário, % da receita
+declarada de candidatos a vereador no RS):
+
+| ano | FEFC | Fundo Partidário | total público |
+|---|---|---|---|
+| 2016 | — (não existia) | 6,7% | 6,7% |
+| 2020 | 35,4% | 2,6% | 38,0% |
+| 2024 | 62,9% | 2,2% | 65,1% |
+
+**2. Vantagem bruta × efeito causal** (desfecho: ln da receita seguinte,
+entre quem se recandidatou):
+
+| | τ (ln) | em % | IC 95% (em %) | n |
+|---|---|---|---|---|
+| Bruta (todos os candidatos) | 0,322 | +38% | [+33%; +43%] | 15.233 |
+| Causal (RDD, colados no corte) | 0,085 | +9% | [−4%; +26%] | 9.275 |
+
+O ponto central sugere que ~74% da vantagem bruta não vem do mandato;
+com o IC causal largo, o que se sustenta é "pelo menos ~30%, e
+possivelmente quase toda". Ressalvas: as duas comparações usam
+populações diferentes (todos × próximos do corte), ambas condicionam à
+recandidatura, e portanto é ordem de grandeza, não decomposição exata.
+
+Dois achados descritivos adicionais: a taxa de recandidatura é de
+66–69% entre eleitos e 26–29% entre não eleitos; e, entre quem voltou,
+vencer por pouco muda a fatia do FEFC na receita seguinte em +2,7 p.p.
+(IC95% [−0,8; +6,7], p = 0,12) — não distinguível de zero.

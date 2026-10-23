@@ -255,11 +255,14 @@ def carregar_resultados(con, ano: int) -> int:
 # Classificação da fonte de receita. O texto do TSE muda entre anos (o
 # FEFC só existe a partir de 2018), por isso a classificação é por
 # padrão de texto e a descrição original fica em origem_bruta.
-def _case_fonte(origem: str, fonte: str) -> str:
-    txt = f"UPPER(COALESCE({fonte}, '') || ' ' || COALESCE({origem}, ''))"
+def _case_fonte(origem: str, fonte: str, extra: str | None = None) -> str:
+    # `extra`: coluna adicional de texto (2016: Fundo Partidario fica em
+    # "Fonte recurso", separada do "Tipo receita").
+    ext = f" || ' ' || COALESCE({extra}, '')" if extra else ""
+    txt = f"UPPER(COALESCE({fonte}, '') || ' ' || COALESCE({origem}, ''){ext})"
     return f"""
     CASE
-        WHEN {txt} LIKE '%FUNDO ESPECIAL DE FINANCIAMENTO%'
+        WHEN {txt} LIKE '%FUNDO ESPECIAL%'
           OR {txt} LIKE '%FEFC%'                    THEN 'fundo_eleitoral'
         WHEN {txt} LIKE '%FUNDO PARTID%'            THEN 'fundo_partidario'
         WHEN {txt} LIKE '%PR%PRIO%'                 THEN 'proprio'
@@ -345,7 +348,7 @@ def _carregar_receitas_legado(con, ano: int, padrao: str) -> int:
             {c['id_receita']}                                   AS id_receita,
             TRY_CAST({c['sq_candidato']} AS BIGINT)              AS sq_candidato,
             {ano}                                                AS ano_eleicao,
-            {_case_fonte(c['origem'], c['fonte'])}               AS fonte,
+            {_case_fonte(c['origem'], c['fonte'], c['fonte_coarse'])}               AS fonte,
             COALESCE({c['fonte']}, '') || ' | ' || COALESCE({c['origem']}, '')
                 || ' | ' || COALESCE({c['fonte_coarse']}, '')    AS origem_bruta,
             {_valor(c['valor'])}                                 AS valor,
